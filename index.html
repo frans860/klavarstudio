@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KlavarStudio Editor</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="app-container">
+        <aside class="sidebar">
+            <h2>KlavarStudio</h2>
+            
+            <div class="tool-section">
+                <h3>Hand (Kleur)</h3>
+                <div class="button-group">
+                    <button id="btn-hand-l" onclick="KlavarEditor.setHand('L')">Links (L)</button>
+                    <button id="btn-hand-r" class="active" onclick="KlavarEditor.setHand('R')">Rechts (R)</button>
+                </div>
+            </div>
+
+            <div class="tool-section">
+                <h3>Duur (Tellen)</h3>
+                <div class="button-group">
+                    <button id="btn-dur-0.25" onclick="KlavarEditor.setDuration(0.25)">1/4</button>
+                    <button id="btn-dur-0.5" onclick="KlavarEditor.setDuration(0.5)">1/2</button>
+                    
+                    <button id="btn-dur-1" class="active" onclick="KlavarEditor.setDuration(1)">1</button>
+                    <button id="btn-dur-2" onclick="KlavarEditor.setDuration(2)">2</button>
+                    <button id="btn-dur-4" onclick="KlavarEditor.setDuration(4)">4</button>
+                </div>
+            </div>
+
+            <div class="controls">
+                <button onclick="KlavarEditor.undo()">Undo (Ctrl+Z)</button>
+                <button class="primary-action" onclick="KlavarEditor.exportJSON()">Export JSON</button>
+            </div>
+            
+            <div class="shortcuts-guide-sidebar">
+                <p><strong>Geluid:</strong> Aan</p>
+                <p><strong>Sneltoetsen:</strong></p>
+                <ul>
+                    <li>3 : Halve tel (0.5)</li>
+                    <li>1 / 2 / 4 : Hele tellen</li>
+                    <li>L / R : Hand wissel</li>
+                    <li>Ctrl+Z : Undo</li>
+                </ul>
+            </div>
+        </aside>
+
+        <main class="editor-area">
+            <canvas id="klavarCanvas"></canvas>
+            <div class="canvas-controls">
+                <button onclick="KlavarEditor.zoomOut()">-</button>
+                <button onclick="KlavarEditor.zoomIn()">+</button>
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
