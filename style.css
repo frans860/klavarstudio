@@ -2,147 +2,95 @@
     --bg-color: #f4f4f4;
     --sidebar-bg: #2c3e50;
     --text-color: #ecf0f1;
-    --line-color: #aaa; /* Kleur van maatlijnen */
-    --black-key-line: #333; /* Kleur van de verticale Klavar lijnen */
+    --active-color: #3498db;
 }
 
 body, html {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    overflow: hidden; /* Canvas regelt scrollen */
+    margin: 0; padding: 0; height: 100%;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+    overflow: hidden;
 }
 
-.app-container {
-    display: flex;
-    height: 100vh;
-}
+.app-container { display: flex; height: 100vh; }
 
 .sidebar {
-    width: 250px;
+    width: 260px; 
+    min-width: 260px; /* NIEUW: Garandeert dat hij nooit smaller wordt dan 260px */
+    flex-shrink: 0;   /* NIEUW: Verbiedt de browser om dit element in te drukken */
+    
     background-color: var(--sidebar-bg);
-    color: var(--text-color);
+    color: var(--text-color); 
     padding: 20px;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+    display: flex; 
+    flex-direction: column; 
+    gap: 15px;
+    box-shadow: 2px 0 5px rgba(0,0,0,0.2); 
     z-index: 10;
+    overflow-y: auto; /* Zorgt voor scrollbar in zijbalk als scherm te laag is */
 }
 
-.sidebar h2 { margin-top: 0; font-size: 1.2rem; }
+.sidebar h2 { margin-top: 0; font-size: 1.4rem; }
+
+.tool-section h3 { 
+    margin: 0 0 8px 0; 
+    font-size: 0.8rem; 
+    color: #aaa; 
+    text-transform: uppercase; 
+    letter-spacing: 1px;
+}
+
+.button-group { display: flex; gap: 5px; flex-wrap: wrap; }
+.button-group button {
+    flex: 1; 
+    padding: 8px 5px; 
+    border: 1px solid #444;
+    background: #34495e; 
+    color: #ccc; 
+    cursor: pointer;
+    border-radius: 4px; 
+    transition: all 0.2s;
+    font-size: 0.9rem;
+}
+.button-group button.active {
+    background: var(--active-color); 
+    color: white; 
+    border-color: var(--active-color); 
+    font-weight: bold;
+}
+.button-group button:hover { background: #415b76; }
+
+.controls { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+.controls button {
+    padding: 10px;
+    cursor: pointer;
+    background: #555;
+    color: white;
+    border: none;
+    border-radius: 4px;
+}
+.primary-action { background: #27ae60 !important; font-weight: bold; }
+
+.shortcuts-guide-sidebar ul { padding-left: 20px; font-size: 0.8rem; color: #ccc; margin: 5px 0; }
+.shortcuts-guide-sidebar li { margin-bottom: 4px; }
 
 .editor-area {
     flex-grow: 1;
     position: relative;
     background-color: #fff;
     cursor: crosshair;
+    overflow: hidden; /* NIEUW: Zorgt dat het canvas niet buiten zijn kader breekt */
+    width: 0; /* NIEUW: CSS truc om flex-child goed te laten schalen met canvas */
 }
-
-canvas {
-    display: block; /* Verwijdert bottom margin bug */
-}
-
-.canvas-controls {
-    position: absolute;
-    bottom: 20px;
-    right: 20px;
-    display: flex;
-    gap: 10px;
-}
-
-button {
-    padding: 8px 12px;
-    cursor: pointer;
-    border: none;
-    border-radius: 4px;
-    background: #3498db;
-    color: white;
-    font-weight: bold;
-}
-
-button:hover { background: #2980b9; }
-
-.shortcuts-guide {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    background: rgba(255, 255, 255, 0.9);
-    padding: 15px;
-    border-radius: 8px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-    font-size: 0.9rem;
-    pointer-events: none; /* Zodat je er doorheen kunt klikken op het canvas als dat nodig is */
-    border: 1px solid #ddd;
-}
-
-.shortcuts-guide h3 { margin-top: 0; margin-bottom: 10px; font-size: 1rem; color: #333; }
-.shortcuts-guide ul { padding-left: 20px; margin: 0; }
-.shortcuts-guide li { margin-bottom: 5px; color: #555; }
-
-/* ... (Bestaande CSS blijft hetzelfde) ... */
-
-/* Voeg dit toe of pas sidebar aan: */
-.tool-status {
-    background: rgba(255,255,255,0.1);
-    padding: 10px;
-    border-radius: 5px;
-    margin-bottom: 20px;
-    border: 1px solid rgba(255,255,255,0.2);
-}
-
-.status-row {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 5px;
-    font-size: 0.9rem;
-}
-
-.shortcuts-guide-sidebar ul {
-    padding-left: 20px;
-    font-size: 0.8rem;
-    color: #ccc;
-}
-
-:root {
-    --bg-color: #f4f4f4;
-    --sidebar-bg: #2c3e50;
-    --text-color: #ecf0f1;
-    --active-color: #3498db;
-}
-
-body, html {
-    margin: 0; padding: 0; height: 100%;
-    font-family: 'Segoe UI', sans-serif; overflow: hidden;
-}
-
-.app-container { display: flex; height: 100vh; }
-
-.sidebar {
-    width: 260px; background-color: var(--sidebar-bg);
-    color: var(--text-color); padding: 20px;
-    display: flex; flex-direction: column; gap: 20px;
-    box-shadow: 2px 0 5px rgba(0,0,0,0.2); z-index: 10;
-}
-
-.tool-section h3 { margin: 0 0 10px 0; font-size: 0.9rem; color: #aaa; text-transform: uppercase; }
-
-.button-group { display: flex; gap: 5px; }
-.button-group button {
-    flex: 1; padding: 8px; border: 1px solid #444;
-    background: #34495e; color: #ccc; cursor: pointer;
-    border-radius: 4px; transition: all 0.2s;
-}
-.button-group button.active {
-    background: var(--active-color); color: white; border-color: var(--active-color); font-weight: bold;
-}
-.button-group button:hover { background: #415b76; }
-
-.controls { display: flex; flex-direction: column; gap: 10px; margin-top: auto; }
-.primary-action { background: #27ae60 !important; border-color: #27ae60 !important; }
-
-.editor-area { flex-grow: 1; position: relative; background-color: #fff; cursor: crosshair; }
 canvas { display: block; }
 
 .canvas-controls { position: absolute; bottom: 20px; right: 20px; display: flex; gap: 10px; }
-.canvas-controls button { width: 40px; height: 40px; font-size: 1.2rem; background: #fff; border: 1px solid #ccc; color: #333; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+.canvas-controls button { 
+    width: 40px; height: 40px; 
+    font-size: 1.5rem; 
+    background: #fff; 
+    border: 1px solid #ccc; 
+    color: #333; 
+    cursor: pointer;
+    border-radius: 50%;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1); 
+}
