@@ -1,6 +1,6 @@
 /**
- * KlavarStudio Core (Compleet gecombineerd)
- * Inclusief: 12-grid, Audio, Auto-Save, Rendering
+ * KlavarStudio Core
+ * Fase 5.2: Center-Lock Sync & Clear All
  */
 
 // --- AUDIO ENGINE ---
@@ -12,23 +12,27 @@ const SoundEngine = {
         this.ctx = new AudioContext();
     },
 
-    playTone(frequency, type = 'sine') {
+    playTone(frequency, durationSec = 0.5, type = 'sine') {
         if (!this.ctx) this.init();
+        if (this.ctx.state === 'suspended') this.ctx.resume(); 
+
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
 
         osc.type = type;
         osc.frequency.setValueAtTime(frequency, this.ctx.currentTime);
         
+        // Volume envelop
         gain.gain.setValueAtTime(0, this.ctx.currentTime);
-        gain.gain.linearRampToValueAtTime(0.1, this.ctx.currentTime + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.5);
+        gain.gain.linearRampToValueAtTime(0.1, this.ctx.currentTime + 0.02); 
+        gain.gain.setValueAtTime(0.1, this.ctx.currentTime + durationSec - 0.02); 
+        gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + durationSec); 
 
         osc.connect(gain);
         gain.connect(this.ctx.destination);
         
         osc.start();
-        osc.stop(this.ctx.currentTime + 0.5);
+        osc.stop(this.ctx.currentTime + durationSec);
     },
 
     getFreq(noteName) {
@@ -40,7 +44,6 @@ const SoundEngine = {
         const octave = parseInt(match[2]);
         const semitoneIndex = notes.indexOf(note);
         
-        // MIDI calc: C4 = 60
         const baseC4 = 60; 
         const midiNum = baseC4 + (octave - 4) * 12 + semitoneIndex;
         return 440 * Math.pow(2, (midiNum - 69) / 12);
@@ -49,24 +52,14 @@ const SoundEngine = {
 
 // --- EDITOR CORE ---
 const KlavarEditor = {
-    canvas: null,
-    ctx: null,
-    width: 0,
-    height: 0,
+    canvas: null, ctx: null, width: 0, height: 0,
     STORAGE_KEY: 'klavarstudio_notes_v1',
 
     config: {
-        keyWidth: 14,       // Smaller want we hebben nu 12 stapjes ipv 7
-        beatHeight: 80,     
-        lineThickness: 1.5, 
-        gridColor: '#333',  
-        beatColor: '#ddd', 
-        measureColor: '#999',
+        keyWidth: 14, beatHeight: 80, lineThickness: 1.5, 
+        gridColor: '#333', beatColor: '#ddd', measureColor: '#999',
+        colorRight: '#e74c3c', colorLeft: '#3498db',
         
-        colorRight: '#e74c3c', 
-        colorLeft: '#3498db',
-        
-        // 12-Grid (Semitones)
         pitchMap: [
             { note: 'C',  type: 'white', slot: 0 },
             { note: 'C#', type: 'black', slot: 1 },
@@ -84,136 +77,132 @@ const KlavarEditor = {
     },
 
     state: {
-        zoom: 1.0,
-        scrollX: 0, 
-        scrollY: 0, 
-        currentHand: 'R', 
-        currentDuration: 1, 
-        notes: [], 
-        history: [], 
-        hoverCursor: null
+        zoom: 1.0, scrollX: 0, scrollY: 0, 
+        currentHand: 'R', currentDuration: 1, 
+        notes: [], history: [], hoverCursor: null,
+        isPlaying: false, bpm: 120, startTime: 0,       
+        playbackBeat: 0, playedNotes: []     
     },
 
     init() {
         this.canvas = document.getElementById('klavarCanvas');
         this.ctx = this.canvas.getContext('2d');
-        
-        // Audio unlock
         document.body.addEventListener('click', () => SoundEngine.init(), { once: true });
 
-        // Listeners
         window.addEventListener('resize', () => this.resize());
         window.addEventListener('keydown', (e) => this.handleKeyDown(e));
-        
         this.canvas.addEventListener('wheel', (e) => this.handleScroll(e));
         this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
         this.canvas.addEventListener('click', (e) => this.handleClick(e));
         this.canvas.addEventListener('mouseleave', () => { this.state.hoverCursor = null; this.draw(); });
 
-        // Load data
         this.loadStateFromLocalStorage();
-        this.resize(); // Trigger initial draw
+        this.resize();
     },
 
-    // --- STORAGE & IMPORT ---
-    saveStateToLocalStorage() {
-        try {
-            const dataToSave = JSON.stringify(this.state.notes);
-            localStorage.setItem(this.STORAGE_KEY, dataToSave);
-            const status = document.getElementById('autoSaveStatus');
-            if (status) {
-                status.textContent = "Autosave: Saved!";
-                setTimeout(() => status.textContent = "Autosave: AAN", 1000);
-            }
-        } catch (e) { console.error("Save failed", e); }
+    setBPM(val) { this.state.bpm = parseInt(val) || 120; },
+
+    play() {
+        if (this.state.isPlaying) return; 
+        SoundEngine.init(); 
+        this.state.isPlaying = true;
+        this.state.startTime = performance.now();
+        this.state.playbackBeat = 0; 
+        this.state.playedNotes = []; 
+        this.state.scrollY = 0; 
+        this.playbackLoop();
     },
 
-    loadStateFromLocalStorage() {
-        try {
-            const savedData = localStorage.getItem(this.STORAGE_KEY);
-            if (savedData) {
-                this.state.notes = JSON.parse(savedData);
-                this.state.history.push(savedData);
-            }
-        } catch (e) { console.warn("Load failed", e); }
+    stop() {
+        this.state.isPlaying = false;
+        this.draw(); 
     },
 
-    showImportPanel() {
-        const panel = document.getElementById('importPanel');
-        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-    },
+    // --- NIEUWE FUNCTIE: CLEAR ALL ---
+    clearAllNotes() {
+        if (!this.state.notes.length) return;
 
-    importJSON() {
-        const inputArea = document.getElementById('importInput');
-        try {
-            const importedNotes = JSON.parse(inputArea.value);
-            if (Array.isArray(importedNotes)) {
-                this.saveState(); // Voor undo
-                this.state.notes = importedNotes;
-                this.saveStateToLocalStorage();
-                this.draw();
-                this.showImportPanel(); // Verberg
-                alert(`Gelukt! ${importedNotes.length} noten geladen.`);
-            }
-        } catch (e) { alert("Foutieve JSON data"); }
-    },
+        if (!confirm("Weet je zeker dat je alle noten wilt verwijderen?")) return;
 
-    exportJSON() {
-        const output = JSON.stringify(this.state.notes, null, 2);
-        console.log(output);
-        navigator.clipboard.writeText(output).then(() => alert("JSON gekopieerd naar klembord!")).catch(() => alert("Kijk in de console (F12)"));
-    },
+        this.saveState(); // Undo mogelijkheid
+        this.state.notes = [];
+        this.state.playedNotes = [];
+        this.state.scrollY = 0; // Reset scroll
 
-    // --- LOGIC & HELPERS ---
-    
-    resize() {
-        const parent = this.canvas.parentElement;
-        this.width = parent.clientWidth;
-        this.height = parent.clientHeight;
-        const dpr = window.devicePixelRatio || 1;
-        this.canvas.width = this.width * dpr;
-        this.canvas.height = this.height * dpr;
-        this.ctx.scale(dpr, dpr);
-        this.draw();
-    },
-
-    saveState() {
-        if (this.state.history.length > 50) this.state.history.shift();
-        this.state.history.push(JSON.stringify(this.state.notes));
-    },
-
-    undo() {
-        if (this.state.history.length === 0) return;
-        const prev = this.state.history.pop();
-        this.state.notes = JSON.parse(prev);
         this.saveStateToLocalStorage();
         this.draw();
     },
 
-    setHand(hand) {
-        this.state.currentHand = hand;
-        document.getElementById('btn-hand-l').classList.toggle('active', hand === 'L');
-        document.getElementById('btn-hand-r').classList.toggle('active', hand === 'R');
+    playbackLoop() {
+        if (!this.state.isPlaying) return;
+
+        const now = performance.now();
+        const secondsElapsed = (now - this.state.startTime) / 1000;
+        const beatsPerSecond = this.state.bpm / 60;
+        
+        this.state.playbackBeat = secondsElapsed * beatsPerSecond;
+
+        const { beatHeight } = this.config;
+        const { zoom } = this.state;
+        const currentBeatHeight = beatHeight * zoom;
+        
+        // Center Lock Scrolling
+        const centerOffset = this.height * 0.5;
+        const targetScrollY = (this.state.playbackBeat * currentBeatHeight) - centerOffset;
+        this.state.scrollY = Math.max(0, targetScrollY);
+
+        this.state.notes.forEach((note, index) => {
+            if (this.state.playedNotes.includes(index)) return;
+
+            const delta = this.state.playbackBeat - note.beat;
+
+            if (delta >= 0 && delta < 0.1) {
+                const durationSec = note.duration * (60 / this.state.bpm);
+                SoundEngine.playTone(SoundEngine.getFreq(note.note), durationSec);
+                this.state.playedNotes.push(index);
+            }
+        });
+
         this.draw();
+        requestAnimationFrame(() => this.playbackLoop());
     },
 
-    setDuration(dur) {
-        this.state.currentDuration = dur;
-        document.querySelectorAll('[id^="btn-dur-"]').forEach(b => b.classList.remove('active'));
-        const btn = document.getElementById(`btn-dur-${dur}`);
-        if(btn) btn.classList.add('active');
-        this.draw();
-    },
+    saveStateToLocalStorage() { try { localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.state.notes)); } catch (e) {} },
+    loadStateFromLocalStorage() { try { const s = localStorage.getItem(this.STORAGE_KEY); if (s) { this.state.notes = JSON.parse(s); this.state.history.push(s); } } catch (e) {} },
+    showImportPanel() { const p = document.getElementById('importPanel'); p.style.display = p.style.display==='none'?'block':'none'; },
+    importJSON() { const i = document.getElementById('importInput'); try { const d = JSON.parse(i.value); if(Array.isArray(d)) { this.saveState(); this.state.notes=d; this.saveStateToLocalStorage(); this.draw(); this.showImportPanel(); } } catch(e) { alert("Fout JSON"); } },
+    exportJSON() { const o = JSON.stringify(this.state.notes,null,2); console.log(o); navigator.clipboard.writeText(o).then(()=>alert("JSON gekopieerd!")).catch(()=>alert("Zie console")); },
 
+    resize() {
+        const p = this.canvas.parentElement; this.width = p.clientWidth; this.height = p.clientHeight;
+        const dpr = window.devicePixelRatio || 1;
+        this.canvas.width = this.width * dpr; this.canvas.height = this.height * dpr;
+        this.ctx.scale(dpr, dpr); this.draw();
+    },
+    saveState() { if (this.state.history.length > 50) this.state.history.shift(); this.state.history.push(JSON.stringify(this.state.notes)); },
+    undo() { if (this.state.history.length === 0) return; this.state.notes = JSON.parse(this.state.history.pop()); this.saveStateToLocalStorage(); this.draw(); },
+    setHand(h) { this.state.currentHand = h; document.getElementById('btn-hand-l').classList.toggle('active', h==='L'); document.getElementById('btn-hand-r').classList.toggle('active', h==='R'); this.draw(); },
+    setDuration(d) { this.state.currentDuration = d; document.querySelectorAll('[id^="btn-dur-"]').forEach(b => b.classList.remove('active')); const btn = document.getElementById(`btn-dur-${d}`); if(btn) btn.classList.add('active'); this.draw(); },
     zoomIn() { this.state.zoom *= 1.1; this.draw(); },
     zoomOut() { this.state.zoom /= 1.1; this.draw(); },
-
+    
+    // --- UPDATED: Sneltoetsen inclusief Delete ---
     handleKeyDown(e) {
         if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); this.undo(); return; }
-        // Block keys if typing in textarea
-        if (e.target.tagName === 'TEXTAREA') return;
+        
+        // Sneltoets voor alles wissen (Ctrl+Delete of Cmd+Backspace)
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                this.clearAllNotes();
+                return;
+            }
+        }
 
+        if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+        
         switch(e.key.toLowerCase()) {
+            case ' ': e.preventDefault(); this.state.isPlaying ? this.stop() : this.play(); break; 
             case 'l': this.setHand('L'); break;
             case 'r': this.setHand('R'); break;
             case '1': this.setDuration(1); break;
@@ -224,191 +213,86 @@ const KlavarEditor = {
         }
     },
 
-    handleScroll(e) {
-        e.preventDefault();
-        if (e.shiftKey) this.state.scrollX += e.deltaY;
-        else {
-            this.state.scrollY -= e.deltaY;
-            if (this.state.scrollY < 0) this.state.scrollY = 0;
-        }
-        this.draw();
+    handleScroll(e) { e.preventDefault(); if(e.shiftKey) this.state.scrollX += e.deltaY; else { this.state.scrollY -= e.deltaY; if(this.state.scrollY < 0) this.state.scrollY = 0; } this.draw(); },
+    getLocationFromMouse(mx, my) {
+        const { scrollX, scrollY, zoom } = this.state; const { keyWidth, beatHeight, pitchMap } = this.config;
+        const cKW = keyWidth * zoom; const cBH = beatHeight * zoom; const cX = this.width/2 - scrollX;
+        const absY = my + scrollY; const beat = Math.round((absY/cBH)*4)/4;
+        const dist = mx - cX; const octW = 12 * cKW; const octIdx = Math.floor(dist/octW);
+        const locX = dist - (octIdx * octW); const slot = locX / cKW;
+        let best = pitchMap[0], minD = Infinity;
+        pitchMap.forEach(p => { const d = Math.abs(p.slot - slot); if (d < minD) { minD = d; best = p; } });
+        return { beat: beat, note: `${best.note}${4+octIdx}`, octave: 4+octIdx, type: best.type, slot: best.slot };
     },
-
-    // CORE: Mouse to Note calculation (12 Grid)
-    getLocationFromMouse(mouseX, mouseY) {
-        const { scrollX, scrollY, zoom } = this.state;
-        const { keyWidth, beatHeight, pitchMap } = this.config;
-
-        const currentKeyWidth = keyWidth * zoom;
-        const currentBeatHeight = beatHeight * zoom;
-        const centerX = this.width / 2 - scrollX;
-
-        // Y: Beat
-        const absoluteY = mouseY + scrollY;
-        const snappedBeat = Math.round((absoluteY / currentBeatHeight) * 4) / 4;
-
-        // X: Note (12 slots per octave)
-        const distFromCenter = mouseX - centerX;
-        const octaveWidth = 12 * currentKeyWidth;
-        
-        const octaveIndex = Math.floor(distFromCenter / octaveWidth);
-        const localX = distFromCenter - (octaveIndex * octaveWidth);
-        const slotVal = localX / currentKeyWidth;
-
-        // Find nearest slot
-        let bestMatch = pitchMap[0];
-        let minDiff = Infinity;
-        pitchMap.forEach(p => {
-            const diff = Math.abs(p.slot - slotVal);
-            if (diff < minDiff) { minDiff = diff; bestMatch = p; }
-        });
-
-        const finalOctave = 4 + octaveIndex;
-        return {
-            beat: snappedBeat,
-            note: `${bestMatch.note}${finalOctave}`,
-            octave: finalOctave,
-            type: bestMatch.type,
-            slot: bestMatch.slot
-        };
-    },
-
-    handleMouseMove(e) {
-        const rect = this.canvas.getBoundingClientRect();
-        this.state.hoverCursor = this.getLocationFromMouse(e.clientX - rect.left, e.clientY - rect.top);
-        this.draw();
-    },
-
+    handleMouseMove(e) { const r = this.canvas.getBoundingClientRect(); this.state.hoverCursor = this.getLocationFromMouse(e.clientX - r.left, e.clientY - r.top); if(!this.state.isPlaying) this.draw(); },
     handleClick(e) {
         if (!this.state.hoverCursor) return;
-        this.saveState(); 
-
+        this.saveState();
         const { beat, note } = this.state.hoverCursor;
         const idx = this.state.notes.findIndex(n => n.beat === beat && n.note === note);
-
-        if (idx >= 0) {
-            this.state.notes.splice(idx, 1);
-        } else {
-            this.state.notes.push({
-                beat: beat,
-                note: note,
-                duration: this.state.currentDuration,
-                hand: this.state.currentHand
-            });
-            SoundEngine.playTone(SoundEngine.getFreq(note));
+        if (idx >= 0) this.state.notes.splice(idx, 1);
+        else { 
+            this.state.notes.push({ beat, note, duration: this.state.currentDuration, hand: this.state.currentHand });
+            SoundEngine.playTone(SoundEngine.getFreq(note), this.state.currentDuration * (60/this.state.bpm)); 
         }
-        this.saveStateToLocalStorage();
-        this.draw();
+        this.saveStateToLocalStorage(); this.draw();
     },
 
-    // --- DRAWING ---
     draw() {
         const { width, height, ctx } = this;
         const { keyWidth, beatHeight, pitchMap, colorLeft, colorRight } = this.config;
-        const { scrollY, scrollX, zoom, notes, hoverCursor, currentHand, currentDuration } = this.state;
+        const { scrollY, scrollX, zoom, notes, hoverCursor, currentHand, currentDuration, isPlaying, playbackBeat } = this.state;
 
         ctx.clearRect(0, 0, width, height);
         ctx.save();
 
-        const currentKeyWidth = keyWidth * zoom;
-        const currentBeatHeight = beatHeight * zoom;
-        const octaveWidth = 12 * currentKeyWidth;
-        const centerX = width / 2 - scrollX;
+        const cKW = keyWidth * zoom; const cBH = beatHeight * zoom; const octW = 12 * cKW; const cX = width/2 - scrollX;
+        const startBeat = Math.floor(scrollY / cBH); const endBeat = startBeat + Math.ceil(height / cBH) + 1;
 
-        // 1. Horizontale Lijnen
-        const startBeat = Math.floor(scrollY / currentBeatHeight);
-        const endBeat = startBeat + Math.ceil(height / currentBeatHeight) + 1;
         ctx.lineWidth = 1;
-
         for (let i = startBeat; i < endBeat; i++) {
-            const drawY = (i * currentBeatHeight) - scrollY;
+            const y = (i * cBH) - scrollY;
             if (i % 4 === 0) {
-                ctx.strokeStyle = this.config.measureColor;
-                ctx.beginPath(); ctx.moveTo(0, drawY); ctx.lineTo(width, drawY); ctx.stroke();
-                ctx.fillStyle = '#666'; ctx.font = '12px Arial'; ctx.fillText(`Maat ${i/4 + 1}`, 10, drawY - 5);
+                ctx.strokeStyle = this.config.measureColor; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
+                ctx.fillStyle = '#666'; ctx.font = '12px Arial'; ctx.fillText(`Maat ${i/4 + 1}`, 10, y - 5);
             } else {
-                ctx.strokeStyle = this.config.beatColor;
-                ctx.beginPath(); ctx.moveTo(0, drawY); ctx.lineTo(width, drawY); ctx.stroke();
+                ctx.strokeStyle = this.config.beatColor; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
             }
         }
-
-        // 2. Verticale Lijnen (Black keys only)
-        const octavesToDraw = 8;
-        for (let oct = -octavesToDraw; oct <= octavesToDraw; oct++) {
-            const octaveX = centerX + (oct * octaveWidth);
-            const isCenterOctave = (oct === 0);
-
-            pitchMap.filter(p => p.type === 'black').forEach(def => {
-                const lineX = octaveX + (def.slot * currentKeyWidth);
-                ctx.beginPath();
-                ctx.strokeStyle = this.config.gridColor;
-                ctx.lineWidth = this.config.lineThickness;
-
-                if (isCenterOctave && (def.note === 'C#' || def.note === 'D#')) {
-                    ctx.setLineDash([5, 5]); ctx.strokeStyle = '#555';
-                } else { ctx.setLineDash([]); }
-                
-                ctx.moveTo(lineX, 0); ctx.lineTo(lineX, height); ctx.stroke();
+        const octs = 8;
+        for (let o = -octs; o <= octs; o++) {
+            const ox = cX + (o * octW); const isC = (o===0);
+            pitchMap.filter(p => p.type === 'black').forEach(d => {
+                const lx = ox + (d.slot * cKW);
+                ctx.beginPath(); ctx.strokeStyle = this.config.gridColor; ctx.lineWidth = this.config.lineThickness;
+                if (isC && (d.note === 'C#' || d.note === 'D#')) { ctx.setLineDash([5, 5]); ctx.strokeStyle = '#555'; } else ctx.setLineDash([]);
+                ctx.moveTo(lx, 0); ctx.lineTo(lx, height); ctx.stroke();
             });
-            
-            if (isCenterOctave) {
-                ctx.fillStyle = '#2980b9'; ctx.font = 'bold 12px Arial'; 
-                ctx.fillText("C4", octaveX - 5, height - 20);
-            }
+            if (isC) { ctx.fillStyle = '#2980b9'; ctx.font = 'bold 12px Arial'; ctx.fillText("C4", ox - 5, height - 20); }
         }
 
-        // 3. Noten Tekenen
-        const drawNote = (n, isGhost = false) => {
-            const match = n.note.match(/([A-G]#?)(-?\d+)/);
-            if (!match) return;
-            const noteName = match[1];
-            const octave = parseInt(match[2]);
-            const pitchInfo = pitchMap.find(p => p.note === noteName);
-            if (!pitchInfo) return;
-
-            const x = centerX + ((octave - 4) * octaveWidth) + (pitchInfo.slot * currentKeyWidth);
-            const y = (n.beat * currentBeatHeight) - scrollY;
-            const radius = currentKeyWidth * 0.45;
-
-            const hand = isGhost ? currentHand : (n.hand || 'R');
-            const mainColor = hand === 'L' ? colorLeft : colorRight;
-
-            // Stokje (Omhoog)
-            const stemLength = (n.duration * currentBeatHeight);
+        const drawNote = (n, ghost=false) => {
+            const m = n.note.match(/([A-G]#?)(-?\d+)/); if(!m) return;
+            const p = pitchMap.find(x => x.note === m[1]); if(!p) return;
+            const x = cX + ((parseInt(m[2])-4)*octW) + (p.slot*cKW);
+            const y = (n.beat * cBH) - scrollY;
+            const h = ghost ? currentHand : (n.hand || 'R'); const col = h==='L'?colorLeft:colorRight;
             
-            ctx.beginPath();
-            ctx.moveTo(x, y); 
-            ctx.lineTo(x, y - stemLength);
-            ctx.strokeStyle = mainColor;
-            ctx.lineWidth = 2;
-            if (isGhost) ctx.globalAlpha = 0.5;
-            ctx.stroke();
-            ctx.globalAlpha = 1.0;
-
-            // Bolletje
-            ctx.beginPath();
-            ctx.arc(x, y, radius, 0, Math.PI * 2);
-            if (isGhost) {
-                ctx.fillStyle = mainColor; ctx.globalAlpha = 0.3; ctx.fill(); ctx.globalAlpha = 1.0;
-            } else {
-                if (pitchInfo.type === 'black') {
-                    ctx.fillStyle = mainColor; ctx.fill();
-                } else {
-                    ctx.fillStyle = 'white'; ctx.fill();
-                    ctx.lineWidth = 2; ctx.strokeStyle = mainColor; ctx.stroke();
-                }
-            }
+            ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - (n.duration * cBH)); 
+            ctx.strokeStyle = col; ctx.lineWidth = 2; if(ghost) ctx.globalAlpha=0.5; ctx.stroke(); ctx.globalAlpha=1;
+            
+            ctx.beginPath(); ctx.arc(x, y, cKW*0.45, 0, Math.PI*2);
+            if(ghost) { ctx.fillStyle = col; ctx.globalAlpha=0.3; ctx.fill(); ctx.globalAlpha=1; }
+            else if (p.type==='black') { ctx.fillStyle = col; ctx.fill(); }
+            else { ctx.fillStyle = 'white'; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle=col; ctx.stroke(); }
         };
+        notes.forEach(n => drawNote(n));
+        if (hoverCursor && !isPlaying) drawNote({ beat: hoverCursor.beat, note: hoverCursor.note, duration: currentDuration }, true);
 
-        notes.forEach(n => drawNote(n, false));
-
-        if (hoverCursor) {
-            drawNote({
-                beat: hoverCursor.beat,
-                note: hoverCursor.note,
-                duration: currentDuration,
-                hand: currentHand
-            }, true);
+        if (isPlaying) {
+            const playY = (playbackBeat * cBH) - scrollY;
+            ctx.beginPath(); ctx.strokeStyle = 'red'; ctx.lineWidth = 2; ctx.moveTo(0, playY); ctx.lineTo(width, playY); ctx.stroke();
+            ctx.fillStyle = 'red'; ctx.beginPath(); ctx.moveTo(0, playY); ctx.lineTo(10, playY - 5); ctx.lineTo(10, playY + 5); ctx.fill();
         }
 
         ctx.restore();

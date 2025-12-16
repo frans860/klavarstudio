@@ -15,9 +15,8 @@ body, html {
 
 .sidebar {
     width: 260px; 
-    min-width: 260px; /* NIEUW: Garandeert dat hij nooit smaller wordt dan 260px */
-    flex-shrink: 0;   /* NIEUW: Verbiedt de browser om dit element in te drukken */
-    
+    min-width: 260px; /* Fix: Nooit smaller dan 260 */
+    flex-shrink: 0;   /* Fix: Niet indrukken */
     background-color: var(--sidebar-bg);
     color: var(--text-color); 
     padding: 20px;
@@ -26,7 +25,7 @@ body, html {
     gap: 15px;
     box-shadow: 2px 0 5px rgba(0,0,0,0.2); 
     z-index: 10;
-    overflow-y: auto; /* Zorgt voor scrollbar in zijbalk als scherm te laag is */
+    overflow-y: auto;
 }
 
 .sidebar h2 { margin-top: 0; font-size: 1.4rem; }
@@ -73,13 +72,13 @@ body, html {
 .shortcuts-guide-sidebar ul { padding-left: 20px; font-size: 0.8rem; color: #ccc; margin: 5px 0; }
 .shortcuts-guide-sidebar li { margin-bottom: 4px; }
 
-.editor-area {
-    flex-grow: 1;
-    position: relative;
-    background-color: #fff;
-    cursor: crosshair;
-    overflow: hidden; /* NIEUW: Zorgt dat het canvas niet buiten zijn kader breekt */
-    width: 0; /* NIEUW: CSS truc om flex-child goed te laten schalen met canvas */
+.editor-area { 
+    flex-grow: 1; 
+    position: relative; 
+    background-color: #fff; 
+    cursor: crosshair; 
+    overflow: hidden; 
+    width: 0; /* Fix voor flexbox scaling */
 }
 canvas { display: block; }
 

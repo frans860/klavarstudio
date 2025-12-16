@@ -13,6 +13,18 @@
             <h2>KlavarStudio</h2>
             
             <div class="tool-section">
+                <h3>Afspelen</h3>
+                <div class="button-group">
+                    <button onclick="KlavarEditor.play()" style="background: #27ae60; border-color: #27ae60; color: white;">▶ Play</button>
+                    <button onclick="KlavarEditor.stop()" style="background: #c0392b; border-color: #c0392b; color: white;">■ Stop</button>
+                </div>
+                <div style="margin-top: 5px; display: flex; align-items: center; justify-content: space-between; font-size: 0.9rem;">
+                    <label for="bpmInput">Tempo (BPM):</label>
+                    <input type="number" id="bpmInput" value="120" style="width: 50px; padding: 3px; background: #34495e; color: white; border: 1px solid #555; border-radius: 3px;" onchange="KlavarEditor.setBPM(this.value)">
+                </div>
+            </div>
+
+            <div class="tool-section">
                 <h3>Hand (Kleur)</h3>
                 <div class="button-group">
                     <button id="btn-hand-l" onclick="KlavarEditor.setHand('L')">Links (L)</button>
@@ -34,6 +46,8 @@
             <div class="controls">
                 <button onclick="KlavarEditor.undo()">Undo (Ctrl+Z)</button>
                 
+                <button onclick="KlavarEditor.clearAllNotes()" style="background: #c0392b; border: 1px solid #a93226; margin-bottom: 10px;">🗑️ Alles wissen</button>
+                
                 <button onclick="KlavarEditor.showImportPanel()">Importeer JSON</button>
                 <div id="importPanel" style="display: none; padding: 10px 0;">
                     <textarea id="importInput" placeholder="Plak hier je JSON-code..." rows="6" style="width: 100%; box-sizing: border-box;"></textarea>
@@ -49,11 +63,12 @@
                 <p><strong id="autoSaveStatus" style="color: #2ecc71;">Autosave: AAN</strong></p>
                 <p><strong>Sneltoetsen:</strong></p>
                 <ul>
+                    <li>Spatie : Play / Stop</li>
                     <li>3 : Halve tel (0.5)</li>
                     <li>1 / 2 / 4 : Hele tellen</li>
                     <li>L / R : Hand wissel</li>
                     <li>Ctrl+Z : Undo</li>
-                    <li>Shift+Scroll : Horizontaal</li>
+                    <li>Ctrl+Del : Alles wissen</li>
                 </ul>
             </div>
         </aside>
