@@ -1,6 +1,6 @@
 /**
  * KlavarStudio Core
- * Fase 5.2: Center-Lock Sync & Clear All
+ * Fase 6: Keyboard Navigation & Quick Entry
  */
 
 // --- AUDIO ENGINE ---
@@ -79,7 +79,11 @@ const KlavarEditor = {
     state: {
         zoom: 1.0, scrollX: 0, scrollY: 0, 
         currentHand: 'R', currentDuration: 1, 
-        notes: [], history: [], hoverCursor: null,
+        notes: [], history: [], 
+        
+        // Cursors
+        hoverCursor: null, // Kan nu ook door toetsenbord worden bestuurd
+        
         isPlaying: false, bpm: 120, startTime: 0,       
         playbackBeat: 0, playedNotes: []     
     },
@@ -94,9 +98,23 @@ const KlavarEditor = {
         this.canvas.addEventListener('wheel', (e) => this.handleScroll(e));
         this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
         this.canvas.addEventListener('click', (e) => this.handleClick(e));
-        this.canvas.addEventListener('mouseleave', () => { this.state.hoverCursor = null; this.draw(); });
+        this.canvas.addEventListener('mouseleave', () => { 
+            // We halen dit weg zodat de cursor blijft staan voor toetsenbord gebruik
+            // this.state.hoverCursor = null; this.draw(); 
+        });
 
         this.loadStateFromLocalStorage();
+        
+        // Initialiseer cursor op startpositie (C4, Beat 0)
+        this.state.hoverCursor = {
+            beat: 0,
+            note: "C4",
+            octave: 4,
+            baseNote: "C",
+            slot: 0,
+            type: "white"
+        };
+        
         this.resize();
     },
 
@@ -118,17 +136,13 @@ const KlavarEditor = {
         this.draw(); 
     },
 
-    // --- NIEUWE FUNCTIE: CLEAR ALL ---
     clearAllNotes() {
         if (!this.state.notes.length) return;
-
         if (!confirm("Weet je zeker dat je alle noten wilt verwijderen?")) return;
-
-        this.saveState(); // Undo mogelijkheid
+        this.saveState(); 
         this.state.notes = [];
         this.state.playedNotes = [];
-        this.state.scrollY = 0; // Reset scroll
-
+        this.state.scrollY = 0; 
         this.saveStateToLocalStorage();
         this.draw();
     },
@@ -145,17 +159,13 @@ const KlavarEditor = {
         const { beatHeight } = this.config;
         const { zoom } = this.state;
         const currentBeatHeight = beatHeight * zoom;
-        
-        // Center Lock Scrolling
         const centerOffset = this.height * 0.5;
         const targetScrollY = (this.state.playbackBeat * currentBeatHeight) - centerOffset;
         this.state.scrollY = Math.max(0, targetScrollY);
 
         this.state.notes.forEach((note, index) => {
             if (this.state.playedNotes.includes(index)) return;
-
             const delta = this.state.playbackBeat - note.beat;
-
             if (delta >= 0 && delta < 0.1) {
                 const durationSec = note.duration * (60 / this.state.bpm);
                 SoundEngine.playTone(SoundEngine.getFreq(note.note), durationSec);
@@ -186,25 +196,111 @@ const KlavarEditor = {
     zoomIn() { this.state.zoom *= 1.1; this.draw(); },
     zoomOut() { this.state.zoom /= 1.1; this.draw(); },
     
-    // --- UPDATED: Sneltoetsen inclusief Delete ---
-    handleKeyDown(e) {
-        if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); this.undo(); return; }
-        
-        // Sneltoets voor alles wissen (Ctrl+Delete of Cmd+Backspace)
-        if (e.key === 'Delete' || e.key === 'Backspace') {
-            if (e.ctrlKey || e.metaKey) {
-                e.preventDefault();
-                this.clearAllNotes();
-                return;
+    // --- KEYBOARD LOGICA ---
+
+    moveKeyboardCursor(dBeat, dPitch) {
+        if (!this.state.hoverCursor) return; // Veiligheid
+
+        let { beat, note, octave, baseNote } = this.state.hoverCursor;
+        const { pitchMap } = this.config;
+
+        // 1. Beat aanpassen
+        beat += dBeat;
+        if (beat < 0) beat = 0;
+
+        // 2. Pitch aanpassen
+        if (dPitch !== 0) {
+            // Zoek huidige index in pitchmap
+            let currentIndex = pitchMap.findIndex(p => p.note === baseNote);
+            if (currentIndex === -1) currentIndex = 0;
+
+            let newIndex = currentIndex + dPitch;
+
+            // Octaaf wissel logica
+            if (newIndex >= pitchMap.length) {
+                newIndex = 0;
+                octave += 1;
+            } else if (newIndex < 0) {
+                newIndex = pitchMap.length - 1;
+                octave -= 1;
             }
+
+            // Update noot gegevens
+            const newPitch = pitchMap[newIndex];
+            baseNote = newPitch.note;
+            note = `${baseNote}${octave}`;
+            this.state.hoverCursor.type = newPitch.type;
+            this.state.hoverCursor.slot = newPitch.slot;
         }
 
+        // Update cursor object
+        this.state.hoverCursor.beat = Math.round(beat * 4) / 4; // Keep snapping
+        this.state.hoverCursor.baseNote = baseNote;
+        this.state.hoverCursor.octave = octave;
+        this.state.hoverCursor.note = note;
+
+        // --- AUTO SCROLL (Volg de cursor) ---
+        const { beatHeight } = this.config;
+        const { zoom, scrollY } = this.state;
+        const currentBeatHeight = beatHeight * zoom;
+        const cursorPixelY = this.state.hoverCursor.beat * currentBeatHeight;
+        const screenY = cursorPixelY - scrollY;
+
+        // Als cursor onderin komt (80% van scherm), scroll naar beneden
+        if (screenY > this.height * 0.8) {
+            this.state.scrollY += (screenY - (this.height * 0.8));
+        }
+        // Als cursor bovenin komt (10% van scherm), scroll naar boven
+        if (screenY < this.height * 0.1) {
+            this.state.scrollY += (screenY - (this.height * 0.1));
+            if (this.state.scrollY < 0) this.state.scrollY = 0;
+        }
+
+        this.draw();
+    },
+
+    handleKeyDown(e) {
+        // Blokkeer sneltoetsen als we aan het typen zijn
         if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+
+        // Ctrl+Z Undo
+        if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); this.undo(); return; }
         
-        switch(e.key.toLowerCase()) {
-            case ' ': e.preventDefault(); this.state.isPlaying ? this.stop() : this.play(); break; 
-            case 'l': this.setHand('L'); break;
-            case 'r': this.setHand('R'); break;
+        // Delete / Backspace
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+            if (e.ctrlKey || e.metaKey) { e.preventDefault(); this.clearAllNotes(); return; }
+        }
+
+        const step = 0.25; // Pijltjes bewegen met kwart tel (of 16e noot)
+
+        switch(e.key) {
+            case 'ArrowUp': 
+                e.preventDefault(); 
+                this.moveKeyboardCursor(-step, 0); 
+                break;
+            case 'ArrowDown': 
+                e.preventDefault(); 
+                this.moveKeyboardCursor(step, 0); 
+                break;
+            case 'ArrowLeft': 
+                e.preventDefault(); 
+                this.moveKeyboardCursor(0, -1); 
+                break;
+            case 'ArrowRight': 
+                e.preventDefault(); 
+                this.moveKeyboardCursor(0, 1); 
+                break;
+            case ' ': // Spatiebalk = Klik (Plaats noot)
+                e.preventDefault();
+                if (this.state.isPlaying) { this.stop(); } // Of als playhead loopt, stop hem
+                else { this.handleClick(); } // Anders, plaats noot
+                break;
+            
+            // Tools
+            case 'l': case 'L': this.setHand('L'); break;
+            case 'r': case 'R': this.setHand('R'); break;
+            
+            // Duur cijfers
             case '1': this.setDuration(1); break;
             case '2': this.setDuration(2); break;
             case '3': this.setDuration(0.5); break;
@@ -222,9 +318,11 @@ const KlavarEditor = {
         const locX = dist - (octIdx * octW); const slot = locX / cKW;
         let best = pitchMap[0], minD = Infinity;
         pitchMap.forEach(p => { const d = Math.abs(p.slot - slot); if (d < minD) { minD = d; best = p; } });
-        return { beat: beat, note: `${best.note}${4+octIdx}`, octave: 4+octIdx, type: best.type, slot: best.slot };
+        return { beat: beat, note: `${best.note}${4+octIdx}`, octave: 4+octIdx, type: best.type, slot: best.slot, baseNote: best.note };
     },
     handleMouseMove(e) { const r = this.canvas.getBoundingClientRect(); this.state.hoverCursor = this.getLocationFromMouse(e.clientX - r.left, e.clientY - r.top); if(!this.state.isPlaying) this.draw(); },
+    
+    // Aangepast: handleClick accepteert nu 'undefined' event als het via Spacebar komt
     handleClick(e) {
         if (!this.state.hoverCursor) return;
         this.saveState();
@@ -287,6 +385,8 @@ const KlavarEditor = {
             else { ctx.fillStyle = 'white'; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle=col; ctx.stroke(); }
         };
         notes.forEach(n => drawNote(n));
+        
+        // Teken cursor altijd (behalve bij play), zodat we hem zien als we pijltjes gebruiken
         if (hoverCursor && !isPlaying) drawNote({ beat: hoverCursor.beat, note: hoverCursor.note, duration: currentDuration }, true);
 
         if (isPlaying) {
