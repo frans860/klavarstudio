@@ -1,6 +1,6 @@
 /**
  * KlavarStudio Core
- * Fase 7.1: Vingerzetting Tools & Mac Fixes
+ * Fase 7.2: Full Song Export (Meta + Notes)
  */
 
 // --- AUDIO ENGINE ---
@@ -80,7 +80,7 @@ const KlavarEditor = {
         zoom: 1.0, scrollX: 0, scrollY: 0, 
         currentHand: 'R', 
         currentDuration: 1, 
-        currentFinger: 0, // NIEUW: Huidig geselecteerde vinger (0 = geen)
+        currentFinger: 0, 
         notes: [], history: [], 
         hoverCursor: null,
         isPlaying: false, bpm: 120, startTime: 0,       
@@ -109,20 +109,23 @@ const KlavarEditor = {
         this.resize();
     },
 
-    setBPM(val) { this.state.bpm = parseInt(val) || 120; },
+    setBPM(val) { 
+        this.state.bpm = parseInt(val) || 120; 
+        // Update input field if changed programmatically (e.g. import)
+        const input = document.getElementById('bpmInput');
+        if(input) input.value = this.state.bpm;
+    },
 
     setTimeSignature(val) {
         this.config.beatsPerMeasure = parseInt(val);
+        // Update select box if changed programmatically
+        const select = document.getElementById('timeSignature');
+        if(select) select.value = this.config.beatsPerMeasure;
         this.draw();
     },
 
-    // --- VINGERZETTING LOGICA ---
-    
-    // Functie voor de UI knoppen (zet de actieve tool)
     setFingerTool(number) {
         this.state.currentFinger = number;
-        
-        // Update UI classes
         for(let i=0; i<=5; i++) {
             const btn = document.getElementById(`btn-fing-${i}`);
             if(btn) btn.classList.remove('active');
@@ -130,18 +133,13 @@ const KlavarEditor = {
         const activeBtn = document.getElementById(`btn-fing-${number}`);
         if(activeBtn) activeBtn.classList.add('active');
 
-        // Als we een cursor hebben en we klikken op een tool, update meteen die noot
-        // (Dit is optioneel gedrag, maar wel handig)
         if (this.state.hoverCursor) {
              const { beat, note } = this.state.hoverCursor;
              const idx = this.state.notes.findIndex(n => n.beat === beat && n.note === note);
-             if (idx >= 0) {
-                 this.setFinger(number);
-             }
+             if (idx >= 0) { this.setFinger(number); }
         }
     },
 
-    // Interne functie om data aan te passen
     setFinger(number) {
         if (!this.state.hoverCursor) return;
         const { beat, note } = this.state.hoverCursor;
@@ -219,8 +217,54 @@ const KlavarEditor = {
     saveStateToLocalStorage() { try { localStorage.setItem(this.STORAGE_KEY, JSON.stringify(this.state.notes)); } catch (e) {} },
     loadStateFromLocalStorage() { try { const s = localStorage.getItem(this.STORAGE_KEY); if (s) { this.state.notes = JSON.parse(s); this.state.history.push(s); } } catch (e) {} },
     showImportPanel() { const p = document.getElementById('importPanel'); p.style.display = p.style.display==='none'?'block':'none'; },
-    importJSON() { const i = document.getElementById('importInput'); try { const d = JSON.parse(i.value); if(Array.isArray(d)) { this.saveState(); this.state.notes=d; this.saveStateToLocalStorage(); this.draw(); this.showImportPanel(); } } catch(e) { alert("Fout JSON"); } },
-    exportJSON() { const o = JSON.stringify(this.state.notes,null,2); console.log(o); navigator.clipboard.writeText(o).then(()=>alert("JSON gekopieerd!")).catch(()=>alert("Zie console")); },
+    
+    // --- UPDATED IMPORT ---
+    importJSON() { 
+        const i = document.getElementById('importInput'); 
+        try { 
+            const data = JSON.parse(i.value); 
+            this.saveState(); 
+            
+            // Check: Is het de OUDE structuur (Array) of NIEUWE (Object)?
+            if (Array.isArray(data)) {
+                this.state.notes = data; 
+                alert("Let op: Oude data structuur geladen (geen BPM/Maatsoort info).");
+            } else if (data.notes) {
+                // Nieuwe structuur!
+                this.state.notes = data.notes;
+                
+                // Laad metadata indien aanwezig
+                if (data.meta) {
+                    if (data.meta.beatsPerMeasure) this.setTimeSignature(data.meta.beatsPerMeasure);
+                    if (data.meta.bpm) this.setBPM(data.meta.bpm);
+                }
+            } else {
+                throw new Error("Ongeldig formaat");
+            }
+            
+            this.saveStateToLocalStorage(); 
+            this.draw(); 
+            this.showImportPanel(); 
+        } catch(e) { alert("Foutieve JSON data"); console.error(e); } 
+    },
+    
+    // --- UPDATED EXPORT ---
+    exportJSON() { 
+        // We maken nu een compleet Song Object
+        const songData = {
+            meta: {
+                title: "Klavar Export",
+                beatsPerMeasure: this.config.beatsPerMeasure,
+                bpm: this.state.bpm,
+                exportedAt: new Date().toISOString()
+            },
+            notes: this.state.notes
+        };
+
+        const out = JSON.stringify(songData, null, 2); 
+        console.log(out); 
+        navigator.clipboard.writeText(out).then(()=>alert("JSON (Song Data) gekopieerd!")).catch(()=>alert("Zie console")); 
+    },
 
     resize() {
         const p = this.canvas.parentElement; this.width = p.clientWidth; this.height = p.clientHeight;
@@ -235,7 +279,6 @@ const KlavarEditor = {
     zoomIn() { this.state.zoom *= 1.1; this.draw(); },
     zoomOut() { this.state.zoom /= 1.1; this.draw(); },
     
-    // --- KEYBOARD ---
     moveKeyboardCursor(dBeat, dPitch) {
         if (!this.state.hoverCursor) return;
         let { beat, note, octave, baseNote } = this.state.hoverCursor;
@@ -285,15 +328,12 @@ const KlavarEditor = {
             if (e.ctrlKey || e.metaKey) { e.preventDefault(); this.clearAllNotes(); return; }
         }
 
-        // Vingerzetting Sneltoetsen (Mac Fix: Gebruik e.code)
-        // Digit0 t/m Digit5 komt overeen met de cijfertoetsen
         if (e.shiftKey) {
-            if (e.code === 'Digit1') { e.preventDefault(); this.setFingerTool(1); return; }
-            if (e.code === 'Digit2') { e.preventDefault(); this.setFingerTool(2); return; }
-            if (e.code === 'Digit3') { e.preventDefault(); this.setFingerTool(3); return; }
-            if (e.code === 'Digit4') { e.preventDefault(); this.setFingerTool(4); return; }
-            if (e.code === 'Digit5') { e.preventDefault(); this.setFingerTool(5); return; }
-            if (e.code === 'Digit0') { e.preventDefault(); this.setFingerTool(0); return; }
+            if (['Digit0','Digit1','Digit2','Digit3','Digit4','Digit5'].includes(e.code)) {
+                e.preventDefault();
+                this.setFingerTool(parseInt(e.code.replace('Digit','')));
+                return;
+            }
         }
 
         const step = 0.25; 
@@ -309,7 +349,6 @@ const KlavarEditor = {
                 break;
             case 'l': case 'L': this.setHand('L'); break;
             case 'r': case 'R': this.setHand('R'); break;
-            // Duur (zonder shift)
             case '1': if(!e.shiftKey) this.setDuration(1); break;
             case '2': if(!e.shiftKey) this.setDuration(2); break;
             case '3': if(!e.shiftKey) this.setDuration(0.5); break;
@@ -338,22 +377,10 @@ const KlavarEditor = {
         const idx = this.state.notes.findIndex(n => n.beat === beat && n.note === note);
         
         if (idx >= 0) {
-            // Als er al een noot is: verwijder hem
             this.state.notes.splice(idx, 1);
         } else { 
-            // Nieuwe noot
-            const newNote = { 
-                beat, 
-                note, 
-                duration: this.state.currentDuration, 
-                hand: this.state.currentHand 
-            };
-            
-            // Als er een vinger-tool actief is (niet 0), voeg die toe
-            if (this.state.currentFinger > 0) {
-                newNote.finger = this.state.currentFinger;
-            }
-            
+            const newNote = { beat, note, duration: this.state.currentDuration, hand: this.state.currentHand };
+            if (this.state.currentFinger > 0) newNote.finger = this.state.currentFinger;
             this.state.notes.push(newNote);
             SoundEngine.playTone(SoundEngine.getFreq(note), this.state.currentDuration * (60/this.state.bpm)); 
         }
@@ -410,13 +437,10 @@ const KlavarEditor = {
             } else {
                 if (p.type==='black') { ctx.fillStyle = col; ctx.fill(); }
                 else { ctx.fillStyle = 'white'; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle=col; ctx.stroke(); }
-                
                 if (n.finger) {
-                    // Zorg voor goed contrast: wit op zwart, zwart op wit
                     ctx.fillStyle = (p.type==='black') ? 'white' : 'black';
                     ctx.font = 'bold 10px Arial';
                     const textWidth = ctx.measureText(n.finger).width;
-                    // Iets correctie voor y-positie (vertical align middle)
                     ctx.fillText(n.finger, x - (textWidth/2), y + 3); 
                 }
             }
