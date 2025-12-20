@@ -14,9 +14,9 @@ body, html {
 .app-container { display: flex; height: 100vh; }
 
 .sidebar {
-    width: 260px; 
-    min-width: 260px; /* Fix: Nooit smaller dan 260 */
-    flex-shrink: 0;   /* Fix: Niet indrukken */
+    width: 270px; /* Iets breder gemaakt voor de knoppen */
+    min-width: 270px;
+    flex-shrink: 0;
     background-color: var(--sidebar-bg);
     color: var(--text-color); 
     padding: 20px;
@@ -38,10 +38,10 @@ body, html {
     letter-spacing: 1px;
 }
 
-.button-group { display: flex; gap: 5px; flex-wrap: wrap; }
+.button-group { display: flex; gap: 4px; flex-wrap: wrap; }
 .button-group button {
     flex: 1; 
-    padding: 8px 5px; 
+    padding: 8px 2px; /* Iets minder padding aan zijkant */
     border: 1px solid #444;
     background: #34495e; 
     color: #ccc; 
@@ -49,6 +49,7 @@ body, html {
     border-radius: 4px; 
     transition: all 0.2s;
     font-size: 0.9rem;
+    min-width: 30px; /* Zorgt dat vinger-knoppen vierkant blijven */
 }
 .button-group button.active {
     background: var(--active-color); 
@@ -78,7 +79,7 @@ body, html {
     background-color: #fff; 
     cursor: crosshair; 
     overflow: hidden; 
-    width: 0; /* Fix voor flexbox scaling */
+    width: 0;
 }
 canvas { display: block; }
 

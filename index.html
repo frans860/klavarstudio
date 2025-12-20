@@ -13,14 +13,21 @@
             <h2>KlavarStudio</h2>
             
             <div class="tool-section">
-                <h3>Afspelen</h3>
-                <div class="button-group">
-                    <button onclick="KlavarEditor.play()" style="background: #27ae60; border-color: #27ae60; color: white;">▶ Play</button>
-                    <button onclick="KlavarEditor.stop()" style="background: #c0392b; border-color: #c0392b; color: white;">■ Stop</button>
+                <h3>Instellingen</h3>
+                <div style="margin-bottom: 10px;">
+                    <label for="timeSignature" style="font-size: 0.8rem; color: #ccc;">Maatsoort:</label>
+                    <select id="timeSignature" onchange="KlavarEditor.setTimeSignature(this.value)" style="width: 100%; padding: 5px; background: #34495e; color: white; border: 1px solid #555; border-radius: 4px;">
+                        <option value="4">4/4 (Standaard)</option>
+                        <option value="3">3/4 of 3/8</option>
+                        <option value="6">6/8 (6 tellen)</option>
+                        <option value="2">2/2 of 2/4</option>
+                    </select>
                 </div>
-                <div style="margin-top: 5px; display: flex; align-items: center; justify-content: space-between; font-size: 0.9rem;">
-                    <label for="bpmInput">Tempo (BPM):</label>
-                    <input type="number" id="bpmInput" value="120" style="width: 50px; padding: 3px; background: #34495e; color: white; border: 1px solid #555; border-radius: 3px;" onchange="KlavarEditor.setBPM(this.value)">
+
+                <div class="button-group">
+                    <button onclick="KlavarEditor.play()" style="background: #27ae60; border-color: #27ae60; color: white;">▶</button>
+                    <button onclick="KlavarEditor.stop()" style="background: #c0392b; border-color: #c0392b; color: white;">■</button>
+                    <input type="number" id="bpmInput" value="120" style="width: 50px; text-align: center; background: #34495e; color: white; border: 1px solid #555; border-radius: 3px;" onchange="KlavarEditor.setBPM(this.value)">
                 </div>
             </div>
 
@@ -43,6 +50,18 @@
                 </div>
             </div>
 
+            <div class="tool-section">
+                <h3>Vingerzetting</h3>
+                <div class="button-group">
+                    <button id="btn-fing-0" class="active" onclick="KlavarEditor.setFingerTool(0)" title="Geen vinger">-</button>
+                    <button id="btn-fing-1" onclick="KlavarEditor.setFingerTool(1)">1</button>
+                    <button id="btn-fing-2" onclick="KlavarEditor.setFingerTool(2)">2</button>
+                    <button id="btn-fing-3" onclick="KlavarEditor.setFingerTool(3)">3</button>
+                    <button id="btn-fing-4" onclick="KlavarEditor.setFingerTool(4)">4</button>
+                    <button id="btn-fing-5" onclick="KlavarEditor.setFingerTool(5)">5</button>
+                </div>
+            </div>
+
             <div class="controls">
                 <button onclick="KlavarEditor.undo()">Undo (Ctrl+Z)</button>
                 <button onclick="KlavarEditor.clearAllNotes()" style="background: #c0392b; border: 1px solid #a93226; margin-bottom: 10px;">🗑️ Alles wissen</button>
@@ -58,13 +77,13 @@
 
             <div class="shortcuts-guide-sidebar">
                 <p><strong id="autoSaveStatus" style="color: #2ecc71;">Autosave: AAN</strong></p>
-                <p><strong>Toetsenbord Navigatie:</strong></p>
+                <p><strong>Toetsenbord:</strong></p>
                 <ul>
                     <li>Pijltjes : Beweeg Cursor</li>
                     <li>Spatie : Plaats Noot</li>
-                    <li>L / R : Hand wissel</li>
                     <li>1-5 : Wissel Duur</li>
-                    <li>Ctrl+Z : Undo</li>
+                    <li>Shift+1-5 : Wissel Vinger</li>
+                    <li>L / R : Hand wissel</li>
                 </ul>
             </div>
         </aside>
